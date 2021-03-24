@@ -16,3 +16,14 @@ rte_mbuf头部有两个缓存行大小的元数据，用来保存mbuf的数据�
 需要放置网络包时，需要通过append,alloc,trim，adj等函数改变rte_buf的位置，确认成功后才能复制数据。  
 超过一个mbuf长度的数据可以写在另一个mbuf中，并用chain函数链接起来，这会设置元数据中的next。可以通过pkt_len获取被链接起来的总数据大小  
 rte_eth_tx_burst 会自动free发送成功的mbuf，其他情况需要通过free函数手动释放。  
+
+用gen_data产生测试数据，为连续的"hi dpdk!"，最后一个为"\0"  
+![](1.png)  
+![](3.png)  
+![](2.png)  
+包的长度小于一个MTU，data中为测试数据，外部是一个udp包头，一个ipv4包头和一个ether包头。  
+ipv4的checksum为ip包头的checksum，udp的checksum为ip的地址加udp包头加数据的checksum。  
+只用了一个mbuf，因为它比MTU大  
+对于较长的数据，ip层会fregmentation，ip里的offset和flag用于标记顺序  
+
+可以目测结果是正确的。 
