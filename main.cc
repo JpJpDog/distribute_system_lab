@@ -85,7 +85,7 @@ static inline int port_init(uint16_t port, struct rte_mempool *mbuf_pool) {
 #include <cstring>
 
 int gen_data(char **out_data) {
-  const int data_len = 200;
+  const int data_len = 20000;
   char *data = (char *)malloc(data_len);
   char *ch = "hi dpdk!";
   int ch_len = strlen(ch);
@@ -96,6 +96,7 @@ int gen_data(char **out_data) {
   }
   data[off] = '\0';
   *out_data = data;
+  printf("## data_len %d\n", off + 1);
   return off + 1;
 }
 
@@ -161,7 +162,8 @@ static void inline fill_udp_hdr(struct rte_udp_hdr *hdr, int data_len,
   hdr->dst_port = rte_cpu_to_be_16(80);
   hdr->src_port = rte_cpu_to_be_16(80);
   uint32_t chksum1 = (uint32_t)(~checksum(hdr, sizeof(*hdr))) + chksum;
-  hdr->dgram_cksum = rte_cpu_to_be_16(~(uint16_t)((chksum1 >> 16) + (chksum1 & 0xffff)));
+  hdr->dgram_cksum =
+      rte_cpu_to_be_16(~(uint16_t)((chksum1 >> 16) + (chksum1 & 0xffff)));
 }
 
 static inline void fill_hdr(struct rte_mbuf *mbuf, int off, bool more,
@@ -194,15 +196,15 @@ static void udp_send(const char *data, int data_len,
       ((data_len + sizeof(rte_udp_hdr)) / (MTU - ether_ip_hdr_size) + 1));
   int off = 0, burst_l = 0;
   struct rte_mbuf *mbuf = safe_alloc_mbuf(mbuf_pool);
-  int ip_data_len = std::min(data_len, MTU);
-  fill_hdr(mbuf, 0, data_len > MTU, ip_data_len);
+  int ip_data_len = std::min(data_len + (int)sizeof(struct rte_udp_hdr), MTU);
+  fill_hdr(mbuf, 0, data_len + sizeof(struct rte_udp_hdr) > MTU, ip_data_len);
   struct rte_udp_hdr *udp_hdr =
       (struct rte_udp_hdr *)safe_append_mbuf(mbuf, sizeof(*udp_hdr));
   uint32_t chksum = checksum(udp_hdr - 8, 8) + checksum(data, data_len);
   chksum = (chksum >> 16) + (chksum & 0xffff);
   fill_udp_hdr(udp_hdr, data_len, chksum);
   char *data_dst = safe_append_mbuf(mbuf, ip_data_len - sizeof(*udp_hdr));
-  memcpy(data_dst, data, ip_data_len - sizeof(*udp_hdr));
+  memcpy(data_dst, data, ip_data_len);
   off += ip_data_len;
   mbufs[burst_l++] = mbuf;
   while (off < data_len) {
