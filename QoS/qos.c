@@ -19,23 +19,29 @@ struct rte_meter_srtcm app_flows[APP_FLOWS_MAX];
  * srTCM
  */
 int qos_meter_init(void) {
-  int ret;
+  int ret, i;
   ret = rte_meter_srtcm_profile_config(&app_srtcm_profile, &app_srtcm_params);
   if (ret) return ret;
-
+  for (i = 0; i < APP_FLOWS_MAX; i++) {
+    ret = rte_meter_srtcm_config(app_flows + i, &app_srtcm_profile);
+    if (ret) return ret;
+  }
   return 0;
 }
 
 enum qos_color qos_meter_run(uint32_t flow_id, uint32_t pkt_len,
                              uint64_t time) {
-  /* to do */
+  uint64_t cur_time = rte_rdtsc();
+  return rte_meter_srtcm_color_blind_check(app_flows + flow_id,
+                                           &app_srtcm_profile, cur_time);
 }
 
 /**
  * WRED
  */
 
-int qos_dropper_init(void) { /* to do */ }
+int qos_dropper_init(void) { /* to do */
+}
 
 int qos_dropper_run(uint32_t flow_id, enum qos_color color, uint64_t time) {
   /* to do */

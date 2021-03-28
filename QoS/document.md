@@ -38,5 +38,5 @@
 
 ### qos_meter example note
 1. configure the profile and each flow runtime context 
-2. in the main_loop, for every received pkt, call `app_pkt_handle` to decide with `rte_pktmbuf_free` it or transmit it by `rte_eth_tx_buffer`.
+2. in the main_loop, for every received pkt, first decide with flow will be sent and then call `app_pkt_handle` to decide with `rte_pktmbuf_free` it or transmit it by `rte_eth_tx_buffer`.
 3. `app_pkt_handle` seems to be simple blind color ?
