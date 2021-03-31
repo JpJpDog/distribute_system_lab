@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
   ret = rte_eal_init(argc, argv);
   if (ret < 0) rte_panic("Cannot init EAL\n");
 
-  qos_meter_init();
-  qos_dropper_init();
+  if (ret = qos_meter_init()) printf("meter init fail! fail num %d\n", ret);
+  if (ret = qos_dropper_init()) printf("dropper init fail! fail num %d\n", ret);
 
   srand(time(NULL));
   uint64_t time = 0;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
       /** get color */
       enum qos_color color = qos_meter_run(flow_id, pkt_len, time);
 
-      /** make decision: weather drop */
+      /** make decision: whether drop */
       int pass = qos_dropper_run(flow_id, color, time);
 
       cnt_send[flow_id] += pkt_len;
@@ -46,7 +46,8 @@ int main(int argc, char **argv) {
   }
 
   for (i = 0; i < APP_FLOWS_MAX; i++) {
-    printf("fid: %d, send: %d, pass: %d\n", i, cnt_send[i], cnt_pass[i]);
+    printf("fid: %d, send: %d, pass: %d %lf\n", i, cnt_send[i], cnt_pass[i],
+           (double)cnt_pass[i] / cnt_send[i]);
   }
 
   return 0;

@@ -7,6 +7,8 @@
  * Single-Rate Three Color Meter, blind mode
  */
 
+#include <stdint.h>
+
 enum qos_color { GREEN = 0, YELLOW, RED };
 
 /* Init meter */
