@@ -109,7 +109,7 @@ func (wk *Worker) register(master string) {
 	args := new(RegisterArgs)
 	args.Worker = wk.name
 	ok := call(master, "Master.Register", args, new(struct{}))
-	if ok == false {
+	if !ok {
 		fmt.Printf("Register: RPC %s register error\n", master)
 	}
 }
