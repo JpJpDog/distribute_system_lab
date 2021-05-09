@@ -39,6 +39,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	// Your code here (Part III, Part IV).
 	//
 	doneChan := make(chan DoTaskResult)
+	doneMap := make(map[int]struct{})
 	doneN := 0
 	taskQu := make([]int, ntasks)
 	taskHead := 0
@@ -58,9 +59,13 @@ DoneAll:
 				case worker = <-registerChan:
 				case result := <-doneChan:
 					if result.Ok {
-						doneN++
-						if doneN == ntasks {
-							break DoneAll
+						_, already := doneMap[result.TaskIdx]
+						if !already {
+							doneN++
+							doneMap[result.TaskIdx] = struct{}{}
+							if doneN == ntasks {
+								break DoneAll
+							}
 						}
 						worker = result.Worker
 					} else {
