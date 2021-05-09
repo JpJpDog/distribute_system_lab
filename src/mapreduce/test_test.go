@@ -213,7 +213,6 @@ func TestManyFailures(t *testing.T) {
 		case done = <-mr.doneChannel:
 			check(t, mr.files)
 			cleanup(mr)
-			break
 		default:
 			// Start 2 workers each sec. The workers fail after 10 tasks
 			w := port("worker" + strconv.Itoa(i))
