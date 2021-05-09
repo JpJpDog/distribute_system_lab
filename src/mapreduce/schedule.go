@@ -38,34 +38,46 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	//
 	// Your code here (Part III, Part IV).
 	//
-	doneN := 0
 	doneChan := make(chan DoTaskResult)
+	doneN := 0
 	taskQu := make([]int, ntasks)
-	quHead := 0
+	taskHead := 0
 	for i := 0; i < ntasks; i++ {
 		taskQu[i] = i
 	}
-	for quHead != len(taskQu) {
-		taskIdx := taskQu[quHead]
-		quHead++
-		worker := ""
-	FindWorker:
+	idleWorkers := make([]string, 0)
+	idleHead := 0
+DoneAll:
+	for {
+		var worker string
+		var taskIdx int
 		for {
-			select {
-			case worker = <-registerChan:
-				break FindWorker
-			case result := <-doneChan:
-				if result.Ok {
-					doneN++
-					worker = result.Worker
-					break FindWorker
-				} else {
-					taskQu = append(taskQu, result.TaskIdx)
+			worker = ""
+			for worker == "" {
+				select {
+				case worker = <-registerChan:
+				case result := <-doneChan:
+					if result.Ok {
+						doneN++
+						if doneN == ntasks {
+							break DoneAll
+						}
+						worker = result.Worker
+					} else {
+						taskQu = append(taskQu, result.TaskIdx)
+						if len(idleWorkers) != idleHead {
+							worker = idleWorkers[idleHead]
+							idleHead++
+						}
+					}
 				}
 			}
-		}
-		if len(worker) == 0 {
-			panic("Should find worker here!\n")
+			if len(taskQu) != taskHead {
+				taskIdx = taskQu[taskHead]
+				taskHead++
+				break
+			}
+			idleWorkers = append(idleWorkers, worker)
 		}
 
 		arg := DoTaskArgs{
@@ -79,18 +91,15 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 			arg.File = mapFiles[taskIdx]
 		}
 
-		go func(ttt int) {
+		go func() {
 			ok := call(worker, "Worker.DoTask", arg, nil)
 			if !ok {
-				debug("Schedule: assign %v task %v to worker %v fail\n", arg.Phase, arg.TaskNumber, worker)
-				doneChan <- DoTaskResult{Ok: false, TaskIdx: taskIdx}
+				fmt.Printf("Schedule: assign %v task %v to worker %v fail\n", arg.Phase, arg.TaskNumber, worker)
+				doneChan <- DoTaskResult{Ok: false, TaskIdx: taskIdx, Worker: worker}
 			} else {
-				doneChan <- DoTaskResult{Ok: true, Worker: worker}
+				doneChan <- DoTaskResult{Ok: true, TaskIdx: taskIdx, Worker: worker}
 			}
-		}(taskIdx)
-	}
-	for i := doneN; i < ntasks; i++ {
-		<-doneChan
+		}()
 	}
 	fmt.Printf("Schedule: %v done\n", phase)
 }
