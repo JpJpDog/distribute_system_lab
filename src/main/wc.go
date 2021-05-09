@@ -32,7 +32,7 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 			wordMap[word] = 1
 		}
 	}
-	var kvs []mapreduce.KeyValue
+	kvs := make([]mapreduce.KeyValue, 0)
 	for k, v := range wordMap {
 		kvs = append(kvs, mapreduce.KeyValue{k, strconv.Itoa(v)})
 	}
