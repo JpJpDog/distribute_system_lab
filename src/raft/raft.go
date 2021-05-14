@@ -224,18 +224,19 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	reply.Term = rf.currentTerm
 	DPrintf("@@@ %v recv AppendEntries\n", rf.me)
-	if rf.updateTerm(args.Term) {
+	rf.updateTerm(args.Term)
+	if rf.currentTerm > args.Term {
 		DPrintf("@@@ %v not success because old term\n", rf.me)
 		reply.Success = false
 		rf.mu.Unlock()
 		return
 	}
 	if len(rf.log) <= args.PrevLogIndex || rf.log[args.PrevLogIndex].TermIdx != args.PrevLogTerm { //not contain PrevIndex entry with PrevTerm
-		DPrintf("@@@ %v not success append because not has prev log\n", rf.me)
+		DPrintf("@@@ %v not success because not has prev log\n", rf.me)
 		reply.Success = false
 	} else {
+		DPrintf("@@@ %v success\n", rf.me)
 		reply.Success = true
-		DPrintf("@@@ %v success append\n", rf.me)
 		newIdx := 0
 		oldIdx := args.PrevLogIndex + 1
 		for newIdx < len(args.Entries) && oldIdx < len(rf.log) && args.Entries[newIdx].TermIdx == rf.log[oldIdx].TermIdx {
@@ -245,8 +246,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.log = rf.log[0:oldIdx]
 		for newIdx < len(args.Entries) {
 			rf.log = append(rf.log, args.Entries[newIdx])
+			DPrintf("@@@ %v append index %v value %v\n", rf.me, len(rf.log)-1, args.Entries[newIdx])
 			newIdx++
 		}
+		rf.lastApplied = len(rf.log) - 1
 		if args.LeaderCommit > rf.commitIndex {
 			newCommit := MinOf(len(rf.log)-1, args.LeaderCommit)
 			appMsgs := make([]ApplyMsg, 0)
@@ -267,8 +270,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			}()
 		}
 	}
-	if rf.status == 2 && len(rf.authCome) == 0 { // prevent blocking
+	if len(rf.authCome) == 0 { // prevent blocking
 		rf.authCome <- struct{}{}
+		DPrintf("@@@ follower %v find leader auth\n", rf.me)
 	}
 	rf.mu.Unlock()
 }
@@ -330,6 +334,8 @@ func (rf *Raft) leaderRoutine() {
 		rf.nextIndex[i] = len(rf.log)
 		rf.matchIndex[i] = 0
 	}
+	rf.matchIndex[rf.me] = rf.lastApplied
+	rf.nextIndex[rf.me] = rf.lastApplied + 1
 	rf.mu.Unlock()
 	replies := make([]AppendEntriesReply, len(rf.peers))
 
@@ -396,7 +402,7 @@ func (rf *Raft) leaderRoutine() {
 						sortMatchIdx := make([]int, len(rf.peers))
 						copy(sortMatchIdx, rf.matchIndex)
 						sort.Ints(sortMatchIdx)
-						maxMajorityIdx := sortMatchIdx[len(rf.peers)/2+1]
+						maxMajorityIdx := sortMatchIdx[len(rf.peers)/2]
 						if rf.commitIndex < maxMajorityIdx {
 							appMsgs := make([]ApplyMsg, 0)
 							for idx := rf.commitIndex + 1; idx <= maxMajorityIdx; idx++ {
@@ -429,9 +435,6 @@ func (rf *Raft) leaderRoutine() {
 				timerClose <- struct{}{}
 				rf.mu.Lock()
 				DPrintf("### leader %v be follower\n", rf.me)
-				if len(rf.toFollower) != 0 {
-					<-rf.toFollower
-				}
 				return
 			}
 		}
@@ -498,9 +501,6 @@ func (rf *Raft) candidateRoutine() {
 			case <-rf.toFollower:
 				rf.mu.Lock()
 				DPrintf("### candidate %v be follower\n", rf.me)
-				if len(rf.toFollower) != 0 {
-					<-rf.toFollower
-				}
 				return
 			}
 		}
@@ -523,8 +523,8 @@ func (rf *Raft) followerRoutine() {
 			select {
 			case timerId := <-timeoutChan:
 				if timerId == currentTimerId {
-					DPrintf("### follower %v timeout, become candidate\n", rf.me)
 					rf.mu.Lock()
+					DPrintf("### follower %v timeout, become candidate\n", rf.me)
 					rf.status = 1
 					return
 				}
@@ -557,8 +557,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.votedFor = -1
 	rf.status = 2
-	rf.authCome = make(chan struct{})
-	rf.toFollower = make(chan struct{})
+	rf.authCome = make(chan struct{}, 1)
+	rf.toFollower = make(chan struct{}, 1)
 
 	rf.log = make([]LogEntry, 1)
 	rf.log[0].TermIdx = 0
