@@ -216,8 +216,9 @@ type AppendEntriesArgs struct {
 }
 
 type AppendEntriesReply struct {
-	Term    int
-	Success bool
+	Term      int
+	Success   bool
+	NextIndex int // if not success because of different term, jump all entries in conflict term
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -228,12 +229,24 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if rf.currentTerm > args.Term {
 		DPrintf("@@@ %v not success because old term\n", rf.me)
 		reply.Success = false
+		reply.NextIndex = -1 //show it fails not because inconsistency
 		rf.mu.Unlock()
 		return
 	}
-	if len(rf.log) <= args.PrevLogIndex || rf.log[args.PrevLogIndex].TermIdx != args.PrevLogTerm { //not contain PrevIndex entry with PrevTerm
+	//not contain PrevIndex entry with PrevTerm
+	if len(rf.log) <= args.PrevLogIndex || rf.log[args.PrevLogIndex].TermIdx != args.PrevLogTerm {
 		DPrintf("@@@ %v not success because not has prev log\n", rf.me)
 		reply.Success = false
+		if len(rf.log) <= args.PrevLogIndex {
+			reply.NextIndex = len(rf.log)
+		} else {
+			lastTerm := rf.log[args.PrevLogIndex].TermIdx
+			prevIdx := args.PrevLogIndex - 1
+			for prevIdx >= 0 && rf.log[prevIdx].TermIdx == lastTerm {
+				prevIdx--
+			}
+			reply.NextIndex = prevIdx + 1
+		}
 	} else {
 		DPrintf("@@@ %v success\n", rf.me)
 		reply.Success = true
@@ -424,8 +437,8 @@ func (rf *Raft) leaderRoutine() {
 					}
 				} else {
 					DPrintf("### leader %v recv AppendEntriesReply from %v fail\n", rf.me, peer)
-					if rf.nextIndex[peer] > 1 {
-						rf.nextIndex[peer]--
+					if reply.NextIndex != -1 {
+						rf.nextIndex[peer] = reply.NextIndex
 					}
 				}
 				rf.mu.Unlock()
