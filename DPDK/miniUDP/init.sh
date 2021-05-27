@@ -1,0 +1,11 @@
+sudo sh -c "echo 64 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages";
+sudo ifconfig ens33 down;
+sudo ifconfig ens38 down;
+cd /home/shenyushi/Code/github/dpdk/kernel/linux/igb_uio;
+sudo modprobe uio;
+make;
+sudo insmod igb_uio.ko;
+cd ../../../usertools;
+dpdk-devbind.py --bind=igb_uio ens33;
+dpdk-devbind.py --bind=igb_uio ens38;
+dpdk-devbind.py -s;
